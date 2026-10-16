@@ -6,7 +6,9 @@ API_STOPS = "https://data.etabus.gov.hk/v1/transport/kmb/stop"
 API_STOP_ETA = "https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/{stop_id}"
 
 CONF_STOP_ID = "stop_id"
+CONF_STOP_IDS = "stop_ids"
 CONF_STOP_NAME = "stop_name"
+CONF_POLES = "poles"
 CONF_ROUTES = "routes"
 
 SCAN_INTERVAL_SECONDS = 60

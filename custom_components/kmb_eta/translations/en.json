@@ -11,9 +11,9 @@
       },
       "pick": {
         "title": "Choose the stop",
-        "description": "The same place can have more than one stop pole.",
+        "description": "Poles that share a name and only differ by a code such as FT920 and FT921 are combined into one device.",
         "data": {
-          "stop_id": "Stop"
+          "stop_name": "Stop"
         }
       },
       "routes": {

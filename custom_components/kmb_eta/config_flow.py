@@ -1,7 +1,8 @@
-"""Config flow: search a stop, then multi-select routes."""
+"""Config flow: search a stop, merge same-name poles, then multi-select routes."""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import voluptuous as vol
@@ -16,8 +17,26 @@ from homeassistant.helpers.selector import (
     TextSelector,
 )
 
-from .api import async_get_stop_eta, async_get_stops, route_key, route_label, unique_routes
-from .const import CONF_ROUTES, CONF_STOP_ID, CONF_STOP_NAME, DOMAIN
+from .api import (
+    async_get_stop_eta,
+    async_get_stops,
+    base_name,
+    group_label,
+    group_same_name,
+    pole_code,
+    route_key,
+    route_label,
+    stop_display_name,
+    unique_routes,
+)
+from .const import (
+    CONF_POLES,
+    CONF_ROUTES,
+    CONF_STOP_ID,
+    CONF_STOP_IDS,
+    CONF_STOP_NAME,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,25 +54,22 @@ def _match_stops(stops: list[dict], query: str) -> list[dict]:
                 str(stop.get("name_tc") or ""),
                 str(stop.get("name_en") or ""),
                 str(stop.get("name_sc") or ""),
+                base_name(str(stop.get("name_tc") or "")),
             ]
         ).lower()
         if needle in names:
             hits.append(stop)
-            if len(hits) >= _MAX_MATCHES:
+            if len(hits) >= 200:
                 break
     return hits
-
-
-def _stop_option_label(stop: dict) -> str:
-    return f"{stop.get('name_tc') or stop.get('name_en')} ({stop.get('stop')})"
 
 
 class KmbConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self) -> None:
-        self._matches: list[dict] = []
-        self._stop: dict | None = None
+        self._groups: list[dict] = []
+        self._group: dict | None = None
         self._route_rows: list[dict] = []
 
     @staticmethod
@@ -68,19 +84,23 @@ class KmbConfigFlow(ConfigFlow, domain=DOMAIN):
             direct_id = user_input.get("stop_id", "").strip()
             try:
                 if direct_id:
-                    self._stop = {"stop": direct_id, "name_tc": direct_id}
+                    self._group = {
+                        "name": direct_id,
+                        "stops": [{"stop": direct_id, "name_tc": direct_id}],
+                        "poles": [],
+                    }
                     return await self.async_step_routes()
                 session = async_get_clientsession(self.hass)
                 stops = await async_get_stops(session)
-                self._matches = _match_stops(stops, query)
+                self._groups = group_same_name(_match_stops(stops, query))[:_MAX_MATCHES]
             except Exception:
                 _LOGGER.exception("Failed to load KMB stops")
                 errors["base"] = "cannot_connect"
             else:
-                if not self._matches:
+                if not self._groups:
                     errors["base"] = "no_stops"
-                elif len(self._matches) == 1:
-                    self._stop = self._matches[0]
+                elif len(self._groups) == 1:
+                    self._group = self._groups[0]
                     return await self.async_step_routes()
                 else:
                     return await self.async_step_pick()
@@ -94,44 +114,71 @@ class KmbConfigFlow(ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
-            description_placeholders={
-                "hint": "輸入站名一部分，例如「美孚」或「長宏」。如果搜尋結果太多，可以加多幾個字。已知站 ID 可以直接填下面。"
-            },
         )
 
     async def async_step_pick(self, user_input: dict | None = None):
-        options = {stop["stop"]: _stop_option_label(stop) for stop in self._matches}
+        options = [
+            {"value": group["name"], "label": group_label(group)} for group in self._groups
+        ]
         if user_input is not None:
-            chosen = user_input[CONF_STOP_ID]
-            self._stop = next(s for s in self._matches if s["stop"] == chosen)
+            chosen = user_input[CONF_STOP_NAME]
+            self._group = next(g for g in self._groups if g["name"] == chosen)
             return await self.async_step_routes()
 
         return self.async_show_form(
             step_id="pick",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_STOP_ID): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[{"value": k, "label": v} for k, v in options.items()],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
+                    vol.Required(CONF_STOP_NAME): SelectSelector(
+                        SelectSelectorConfig(options=options, mode=SelectSelectorMode.DROPDOWN)
                     )
                 }
             ),
         )
 
+    async def _load_routes(self) -> None:
+        assert self._group is not None
+        session = async_get_clientsession(self.hass)
+        stops = self._group["stops"]
+        poles = self._group.get("poles") or []
+        multi = len(stops) > 1
+
+        async def _one(stop: dict, index: int) -> list[dict]:
+            rows = await async_get_stop_eta(session, stop["stop"])
+            pole = poles[index] if index < len(poles) else pole_code(stop_display_name(stop))
+            tagged = []
+            for row in rows:
+                item = dict(row)
+                if multi and pole:
+                    item["_pole"] = pole
+                tagged.append(item)
+            return tagged
+
+        batches = await asyncio.gather(
+            *(_one(stop, index) for index, stop in enumerate(stops)),
+            return_exceptions=True,
+        )
+        rows: list[dict] = []
+        errors = 0
+        for batch in batches:
+            if isinstance(batch, Exception):
+                errors += 1
+                _LOGGER.warning("KMB route list failed: %s", batch)
+                continue
+            rows.extend(batch)
+        if errors and not rows:
+            raise RuntimeError("all poles failed")
+        self._route_rows = unique_routes(rows)
+
     async def async_step_routes(self, user_input: dict | None = None):
         errors: dict[str, str] = {}
-        assert self._stop is not None
-        stop_id = self._stop["stop"]
+        assert self._group is not None
 
         if not self._route_rows:
             try:
-                session = async_get_clientsession(self.hass)
-                rows = await async_get_stop_eta(session, stop_id)
-                self._route_rows = unique_routes(rows)
+                await self._load_routes()
             except Exception:
-                _LOGGER.exception("Failed to load ETAs for %s", stop_id)
+                _LOGGER.exception("Failed to load ETAs")
                 errors["base"] = "cannot_connect"
 
         if user_input is not None and not errors:
@@ -139,14 +186,18 @@ class KmbConfigFlow(ConfigFlow, domain=DOMAIN):
             if not selected:
                 errors["base"] = "no_routes_selected"
             else:
-                name = self._stop.get("name_tc") or self._stop.get("name_en") or stop_id
-                await self.async_set_unique_id(f"kmb_{stop_id}")
+                stops = self._group["stops"]
+                ids = [stop["stop"] for stop in stops]
+                name = self._group["name"]
+                await self.async_set_unique_id("kmb_" + "_".join(sorted(ids)))
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
                     title=f"九巴 {name}",
                     data={
-                        CONF_STOP_ID: stop_id,
+                        CONF_STOP_ID: ids[0],
+                        CONF_STOP_IDS: ids,
                         CONF_STOP_NAME: name,
+                        CONF_POLES: list(self._group.get("poles") or []),
                         CONF_ROUTES: selected,
                     },
                 )
@@ -163,7 +214,10 @@ class KmbConfigFlow(ConfigFlow, domain=DOMAIN):
                     SelectSelectorConfig(
                         options=[
                             {"value": route_key(row), "label": route_label(row)}
-                            for row in sorted(self._route_rows, key=lambda r: str(r.get("route")))
+                            for row in sorted(
+                                self._route_rows,
+                                key=lambda r: (str(r.get("route")), str(r.get("_pole") or "")),
+                            )
                         ],
                         multiple=True,
                         mode=SelectSelectorMode.LIST,
@@ -175,21 +229,47 @@ class KmbConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="routes",
             data_schema=schema,
             errors=errors,
-            description_placeholders={"stop": _stop_option_label(self._stop)},
+            description_placeholders={"stop": group_label(self._group)},
         )
 
 
 class KmbOptionsFlow(OptionsFlow):
-    """Change which routes are tracked. Adding or removing reloads the entry."""
+    """Change which routes are tracked across every pole of this stop."""
 
     async def async_step_init(self, user_input: dict | None = None):
         entry = self.config_entry
         errors: dict[str, str] = {}
         current = list(entry.options.get(CONF_ROUTES) or entry.data.get(CONF_ROUTES) or [])
+        ids = list(entry.data.get(CONF_STOP_IDS) or [entry.data[CONF_STOP_ID]])
+        poles = list(entry.data.get(CONF_POLES) or [])
+        multi = len(ids) > 1
 
         try:
             session = async_get_clientsession(self.hass)
-            rows = unique_routes(await async_get_stop_eta(session, entry.data[CONF_STOP_ID]))
+
+            async def _one(index: int, stop_id: str) -> list[dict]:
+                rows = await async_get_stop_eta(session, stop_id)
+                pole = poles[index] if index < len(poles) else ""
+                tagged = []
+                for row in rows:
+                    item = dict(row)
+                    if multi and pole:
+                        item["_pole"] = pole
+                    tagged.append(item)
+                return tagged
+
+            batches = await asyncio.gather(
+                *(_one(index, stop_id) for index, stop_id in enumerate(ids)),
+                return_exceptions=True,
+            )
+            rows: list[dict] = []
+            for batch in batches:
+                if isinstance(batch, Exception):
+                    continue
+                rows.extend(batch)
+            if not rows and ids:
+                return self.async_abort(reason="cannot_connect")
+            rows = unique_routes(rows)
         except Exception:
             _LOGGER.exception("Failed to refresh route list")
             return self.async_abort(reason="cannot_connect")
@@ -197,7 +277,7 @@ class KmbOptionsFlow(OptionsFlow):
         known = {route_key(row) for row in rows}
         options = [
             {"value": route_key(row), "label": route_label(row)}
-            for row in sorted(rows, key=lambda r: str(r.get("route")))
+            for row in sorted(rows, key=lambda r: (str(r.get("route")), str(r.get("_pole") or "")))
         ]
         for key in current:
             if key not in known:

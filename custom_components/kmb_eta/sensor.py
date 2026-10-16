@@ -64,14 +64,20 @@ class KmbRouteSensor(CoordinatorEntity[KmbCoordinator], SensorEntity):
     def __init__(self, coordinator: KmbCoordinator, entry: ConfigEntry, key: str) -> None:
         super().__init__(coordinator)
         self._key = key
-        route, direction, service = (key.split("|") + ["", "", ""])[:3]
+        parts = key.split("|")
+        if len(parts) >= 4:
+            pole, route, direction, service = parts[:4]
+        else:
+            pole = ""
+            route, direction, service = (parts + ["", "", ""])[:3]
         self._route = route
         self._direction = direction
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_has_entity_name = True
         direction_label = "去程" if direction == "O" else "回程" if direction == "I" else direction
         service_label = "" if service in ("1", "") else f" 特別{service}"
-        self._attr_name = f"{route} {direction_label}{service_label}"
+        pole_label = f" {pole}" if pole else ""
+        self._attr_name = f"{route} {direction_label}{service_label}{pole_label}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"九巴 {coordinator.stop_name}",
