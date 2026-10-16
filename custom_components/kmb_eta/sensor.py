@@ -66,9 +66,8 @@ class KmbRouteSensor(CoordinatorEntity[KmbCoordinator], SensorEntity):
         self._key = key
         parts = key.split("|")
         if len(parts) >= 4:
-            pole, route, direction, service = parts[:4]
+            _pole, route, direction, service = parts[:4]
         else:
-            pole = ""
             route, direction, service = (parts + ["", "", ""])[:3]
         self._route = route
         self._direction = direction
@@ -76,8 +75,7 @@ class KmbRouteSensor(CoordinatorEntity[KmbCoordinator], SensorEntity):
         self._attr_has_entity_name = True
         direction_label = "去程" if direction == "O" else "回程" if direction == "I" else direction
         service_label = "" if service in ("1", "") else f" 特別{service}"
-        pole_label = f" {pole}" if pole else ""
-        self._attr_name = f"{route} {direction_label}{service_label}{pole_label}"
+        self._attr_name = f"{route} {direction_label}{service_label}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"九巴 {coordinator.stop_name}",

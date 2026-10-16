@@ -86,9 +86,7 @@ def route_label(item: dict) -> str:
     dest = item.get("dest_tc") or item.get("dest_en") or ""
     service = item.get("service_type")
     extra = f" 特別班{service}" if service not in (1, "1", None) else ""
-    pole = item.get("_pole")
-    pole_bit = f" [{pole}]" if pole else ""
-    return f"{item.get('route')} → {dest}（{direction}）{extra}{pole_bit}"
+    return f"{item.get('route')} → {dest}（{direction}）{extra}"
 
 
 def unique_routes(rows: list[dict]) -> list[dict]:
