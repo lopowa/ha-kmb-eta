@@ -1,0 +1,54 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Find a bus stop",
+        "description": "Type part of the stop name, for example Mei Foo. Or paste a 16-character stop ID.",
+        "data": {
+          "query": "Stop name",
+          "stop_id": "Stop ID (optional)"
+        }
+      },
+      "pick": {
+        "title": "Choose the stop",
+        "description": "The same place can have more than one stop pole.",
+        "data": {
+          "stop_id": "Stop"
+        }
+      },
+      "routes": {
+        "title": "Choose routes",
+        "description": "Stop: {stop}\nSelect one or more routes. Each becomes a sensor whose state is minutes until the next bus.",
+        "data": {
+          "routes": "Routes"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the KMB open data API.",
+      "no_stops": "No stop matched that name.",
+      "no_routes": "This stop has no ETA data right now.",
+      "no_routes_selected": "Select at least one route."
+    },
+    "abort": {
+      "already_configured": "This stop is already added. Change routes from the integration options.",
+      "cannot_connect": "Could not reach the KMB open data API."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Routes to track",
+        "data": {
+          "routes": "Routes"
+        }
+      }
+    },
+    "error": {
+      "no_routes_selected": "Select at least one route."
+    },
+    "abort": {
+      "cannot_connect": "Could not reach the KMB open data API."
+    }
+  }
+}

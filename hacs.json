@@ -1,0 +1,8 @@
+{
+  "name": "九巴到站",
+  "content_in_root": false,
+  "filename": "kmb_eta",
+  "render_readme": true,
+  "domains": ["sensor"],
+  "homeassistant": "2024.1.0"
+}

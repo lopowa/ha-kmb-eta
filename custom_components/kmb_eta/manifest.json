@@ -1,0 +1,11 @@
+{
+  "domain": "kmb_eta",
+  "name": "九巴到站",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://data.gov.hk/en-data/dataset/hk-td-tis_21-etakmb",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://data.gov.hk/en-data/dataset/hk-td-tis_21-etakmb",
+  "requirements": [],
+  "version": "1.0.0"
+}

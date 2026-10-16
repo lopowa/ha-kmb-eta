@@ -1,0 +1,55 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "搵巴士站",
+        "description": "輸入站名（中或英），例如「美孚」、「長宏」。已知 16 位站 ID 可以只填站 ID。",
+        "data": {
+          "query": "站名",
+          "stop_id": "站 ID（可留空）"
+        }
+      },
+      "pick": {
+        "title": "揀巴士站",
+        "description": "同一個地名可能有多過一條站柱，揀完之後會列出而家有到站資料嘅路線。",
+        "data": {
+          "stop_id": "巴士站"
+        }
+      },
+      "routes": {
+        "title": "揀路線",
+        "description": "站：{stop}\n可以一次揀多條。每條路線會變成一個 sensor，狀態係下一班仲有幾多分鐘。",
+        "data": {
+          "routes": "路線"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "連唔到九巴開放數據，請稍後再試。",
+      "no_stops": "搵唔到呢個站名，試下短啲或者用英文站名。",
+      "no_routes": "呢個站而家冇任何到站資料，可能係收車或者站 ID 唔啱。",
+      "no_routes_selected": "至少揀一條路線。"
+    },
+    "abort": {
+      "already_configured": "呢個巴士站已經加過。去個整合嘅選項改路線就得。",
+      "cannot_connect": "連唔到九巴開放數據。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "改跟蹤嘅路線",
+        "description": "增減路線之後會重新載入。已經收車、暫時冇 ETA 嘅線會標明。",
+        "data": {
+          "routes": "路線"
+        }
+      }
+    },
+    "error": {
+      "no_routes_selected": "至少揀一條路線。"
+    },
+    "abort": {
+      "cannot_connect": "連唔到九巴開放數據，而家改唔到路線。"
+    }
+  }
+}
